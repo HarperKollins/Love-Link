@@ -83,36 +83,38 @@ const Profile = () => {
 
     setUploading(true);
     try {
-      const storageRef = ref(getStorage(), `users/${currentUser.uid}/photos/${Date.now()}`);
+      const storage = getStorage();
+      const storageRef = ref(storage, `users/${currentUser.uid}/profile/${Date.now()}_${file.name}`);
       const uploadTask = uploadBytesResumable(storageRef, file);
       
       uploadTask.on('state_changed', 
         (snapshot) => {
           // Progress tracking if needed
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          console.log('Upload is ' + progress + '% done');
         },
         (error) => {
           console.error('Error uploading photo:', error);
           setUploading(false);
         },
         async () => {
-          const photoURL = await getDownloadURL(uploadTask.snapshot.ref);
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
           
-          // Update profile photo
+          // Update auth profile
           await updateProfile(currentUser, {
-            photoURL: photoURL
+            photoURL: downloadURL
           });
 
           // Update Firestore
           const userRef = doc(db, 'users', currentUser.uid);
           await updateDoc(userRef, {
-            photoURL: photoURL,
-            photos: [...(profile.photos || []), photoURL]
+            photoURL: downloadURL
           });
 
+          // Update local state
           setProfile(prev => ({
             ...prev,
-            photoURL: photoURL,
-            photos: [...(prev.photos || []), photoURL]
+            photoURL: downloadURL
           }));
           
           setUploading(false);
@@ -155,14 +157,25 @@ const Profile = () => {
         {/* Profile Header */}
         <div className="relative h-48 bg-gradient-to-r from-pink-500 to-purple-600">
           <div className="absolute -bottom-16 left-8">
-            <div className="relative">
-              <img
-                src={profile.photoURL || 'https://via.placeholder.com/150'}
-                alt="Profile"
-                className="w-32 h-32 rounded-full border-4 border-white object-cover"
-              />
+            <div className="relative group">
+              <div className="w-32 h-32 rounded-full border-4 border-white overflow-hidden bg-gray-200">
+                {uploading ? (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-pink-500"></div>
+                  </div>
+                ) : (
+                  <img
+                    src={profile.photoURL || 'https://via.placeholder.com/150'}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.src = 'https://via.placeholder.com/150';
+                    }}
+                  />
+                )}
+              </div>
               {editMode && (
-                <label className="absolute bottom-0 right-0 bg-white rounded-full p-2 shadow-lg cursor-pointer">
+                <label className="absolute bottom-0 right-0 bg-white rounded-full p-2 shadow-lg cursor-pointer hover:bg-gray-50 transition-colors">
                   <input
                     type="file"
                     accept="image/*"
@@ -181,7 +194,7 @@ const Profile = () => {
 
         {/* Profile Content */}
         <div className="p-8 pt-20">
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-gray-800">
               {editMode ? (
                 <input
@@ -189,7 +202,8 @@ const Profile = () => {
                   name="displayName"
                   value={profile.displayName}
                   onChange={handleInputChange}
-                  className="border-b-2 border-pink-500 focus:outline-none"
+                  className="border-b-2 border-pink-500 focus:outline-none px-2 py-1"
+                  placeholder="Your Name"
                 />
               ) : (
                 profile.displayName || 'Your Name'
@@ -197,162 +211,174 @@ const Profile = () => {
             </h1>
             <button
               onClick={() => setEditMode(!editMode)}
-              className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors"
+              className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2"
             >
               {editMode ? 'Save Profile' : 'Edit Profile'}
             </button>
           </div>
 
           {editMode ? (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Bio</label>
-                  <textarea
-                    name="bio"
-                    value={profile.bio}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
-                    rows="3"
-                  />
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
+                    <textarea
+                      name="bio"
+                      value={profile.bio}
+                      onChange={handleInputChange}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                      rows="4"
+                      placeholder="Tell us about yourself..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
+                    <input
+                      type="text"
+                      name="location"
+                      value={profile.location}
+                      onChange={handleInputChange}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                      placeholder="Your location"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">University Campus</label>
+                    <input
+                      type="text"
+                      name="universityCampus"
+                      value={profile.universityCampus}
+                      onChange={handleInputChange}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                      placeholder="Your university campus"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Interests (comma separated)</label>
-                  <input
-                    type="text"
-                    value={profile.interests.join(', ')}
-                    onChange={handleInterestsChange}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Location</label>
-                  <input
-                    type="text"
-                    name="location"
-                    value={profile.location}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Age</label>
-                  <input
-                    type="number"
-                    name="age"
-                    value={profile.age}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Gender</label>
-                  <select
-                    name="gender"
-                    value={profile.gender}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
-                  >
-                    <option value="">Select Gender</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Looking For</label>
-                  <select
-                    name="lookingFor"
-                    value={profile.lookingFor}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
-                  >
-                    <option value="">Select</option>
-                    <option value="friendship">Friendship</option>
-                    <option value="dating">Dating</option>
-                    <option value="relationship">Relationship</option>
-                    <option value="marriage">Marriage</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">University Campus</label>
-                  <input
-                    type="text"
-                    name="universityCampus"
-                    value={profile.universityCampus}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
-                    placeholder="Enter your university campus"
-                  />
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Age</label>
+                    <input
+                      type="number"
+                      name="age"
+                      value={profile.age}
+                      onChange={handleInputChange}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                      placeholder="Your age"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+                    <select
+                      name="gender"
+                      value={profile.gender}
+                      onChange={handleInputChange}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Looking For</label>
+                    <select
+                      name="lookingFor"
+                      value={profile.lookingFor}
+                      onChange={handleInputChange}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                    >
+                      <option value="">Select what you're looking for</option>
+                      <option value="friendship">Friendship</option>
+                      <option value="dating">Dating</option>
+                      <option value="relationship">Relationship</option>
+                      <option value="marriage">Marriage</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Interests</label>
+                    <input
+                      type="text"
+                      value={profile.interests.join(', ')}
+                      onChange={handleInterestsChange}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                      placeholder="Enter interests, separated by commas"
+                    />
+                  </div>
                 </div>
               </div>
-              <button
-                type="submit"
-                className="w-full px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors"
-              >
-                Save Changes
-              </button>
+
+              <div className="flex justify-end pt-6">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-8 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </form>
           ) : (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800">About Me</h3>
-                  <p className="mt-2 text-gray-600">{profile.bio || 'No bio added yet'}</p>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">About Me</h3>
+                  <p className="text-gray-600">{profile.bio || 'No bio added yet'}</p>
                 </div>
+
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800">Interests</h3>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {profile.interests.map((interest, index) => (
-                      <span
-                        key={index}
-                        className="px-3 py-1 bg-pink-100 text-pink-800 rounded-full text-sm"
-                      >
-                        {interest}
-                      </span>
-                    ))}
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Basic Information</h3>
+                  <div className="space-y-3">
+                    <p className="flex items-center text-gray-600">
+                      <span className="font-medium w-32">Location:</span>
+                      <span>{profile.location || 'Not specified'}</span>
+                    </p>
+                    <p className="flex items-center text-gray-600">
+                      <span className="font-medium w-32">Age:</span>
+                      <span>{profile.age || 'Not specified'}</span>
+                    </p>
+                    <p className="flex items-center text-gray-600">
+                      <span className="font-medium w-32">Gender:</span>
+                      <span>{profile.gender || 'Not specified'}</span>
+                    </p>
+                    <p className="flex items-center text-gray-600">
+                      <span className="font-medium w-32">Looking For:</span>
+                      <span>{profile.lookingFor || 'Not specified'}</span>
+                    </p>
+                    <p className="flex items-center text-gray-600">
+                      <span className="font-medium w-32">Campus:</span>
+                      <span>{profile.universityCampus || 'Not specified'}</span>
+                    </p>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
-                  <div className="mt-2 space-y-2">
-                    <p><span className="font-medium">Location:</span> {profile.location || 'Not specified'}</p>
-                    <p><span className="font-medium">Age:</span> {profile.age || 'Not specified'}</p>
-                    <p><span className="font-medium">Gender:</span> {profile.gender || 'Not specified'}</p>
-                    <p><span className="font-medium">Looking For:</span> {profile.lookingFor || 'Not specified'}</p>
-                    <p><span className="font-medium">University Campus:</span> {profile.universityCampus || 'Not specified'}</p>
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800">Additional Information</h3>
-                  <div className="mt-2 space-y-2">
-                    <p><span className="font-medium">Height:</span> {profile.height || 'Not specified'}</p>
-                    <p><span className="font-medium">Education:</span> {profile.education || 'Not specified'}</p>
-                    <p><span className="font-medium">Occupation:</span> {profile.occupation || 'Not specified'}</p>
-                    <p><span className="font-medium">Relationship Status:</span> {profile.relationshipStatus || 'Not specified'}</p>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Interests</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {profile.interests && profile.interests.length > 0 ? (
+                      profile.interests.map((interest, index) => (
+                        <span
+                          key={index}
+                          className="px-3 py-1 bg-pink-100 text-pink-600 rounded-full text-sm"
+                        >
+                          {interest}
+                        </span>
+                      ))
+                    ) : (
+                      <p className="text-gray-600">No interests added yet</p>
+                    )}
                   </div>
                 </div>
               </div>
-
-              {profile.photos && profile.photos.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Photos</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {profile.photos.map((photo, index) => (
-                      <div key={index} className="relative">
-                        <img
-                          src={photo}
-                          alt={`Photo ${index + 1}`}
-                          className="w-full h-32 object-cover rounded-lg"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
