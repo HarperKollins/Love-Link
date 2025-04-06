@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
+  }
+  .btn-primary {
+    @apply bg-primary-600 text-white hover:bg-primary-700;
+  }
+  .btn-secondary {
+    @apply bg-secondary-600 text-white hover:bg-secondary-700;
+  }
+  .card {
+    @apply bg-white rounded-xl shadow-soft p-6;
+  }
+}
+
+/* Custom styles for the previous UI/UX */
+.bg-gradient-to-b {
+  background-image: linear-gradient(to bottom, var(--tw-gradient-stops));
+}
+
+.from-pink-50 {
+  --tw-gradient-from: #fdf2f8;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(253, 242, 248, 0));
+}
+
+.to-white {
+  --tw-gradient-to: #ffffff;
+}
+
+.text-primary-600 {
+  color: #db2777;
+}
+
+.hover\:text-primary-500:hover {
+  color: #ec4899;
+}
+
+.bg-primary-600 {
+  background-color: #db2777;
+}
+
+.hover\:bg-primary-700:hover {
+  background-color: #be185d;
+}
+
+.focus\:ring-primary-500:focus {
+  --tw-ring-color: #ec4899;
+}
+
+.focus\:border-primary-500:focus {
+  border-color: #ec4899;
+}
+
+.shadow-soft {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
