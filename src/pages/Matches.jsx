@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { getRecommendedMatches, getPotentialMatches } from '../services/matching';
+import { getRecommendedMatches, getPotentialMatches } from '../services/matching.js';
 import ProfileCard from '../components/ui/ProfileCard';
 import WelcomePopup from '../components/WelcomePopup';
 import { HeartIcon, XMarkIcon } from '@heroicons/react/24/outline';
