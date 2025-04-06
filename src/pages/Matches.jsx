@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { getRecommendedMatches, getPotentialMatches } from '../services/matching.js';
+import * as matchingService from '../services/matching';
 import ProfileCard from '../components/ui/ProfileCard';
 import WelcomePopup from '../components/WelcomePopup';
 import { HeartIcon, XMarkIcon } from '@heroicons/react/24/outline';
@@ -27,7 +27,7 @@ const Matches = () => {
         setError('');
 
         // Get recommended matches
-        const recommendedMatches = await getRecommendedMatches(currentUser);
+        const recommendedMatches = await matchingService.getRecommendedMatches(currentUser);
         setMatches(recommendedMatches);
       } catch (error) {
         console.error('Error fetching matches:', error);

@@ -72,7 +72,7 @@ const calculateCompatibilityScore = (user1, user2) => {
 };
 
 // Get recommended matches for a user
-const getRecommendedMatches = async (currentUser, limit = 10) => {
+export const getRecommendedMatches = async (currentUser, limit = 10) => {
   try {
     // Get all users except current user
     const usersRef = collection(db, 'users');
@@ -106,7 +106,7 @@ const getRecommendedMatches = async (currentUser, limit = 10) => {
 };
 
 // Get potential matches based on specific criteria
-const getPotentialMatches = async (currentUser, criteria = {}) => {
+export const getPotentialMatches = async (currentUser, criteria = {}) => {
   try {
     const { 
       universityCampus,
@@ -185,6 +185,4 @@ const getPotentialMatches = async (currentUser, criteria = {}) => {
     console.error('Error getting potential matches:', error);
     return [];
   }
-};
-
-export { getRecommendedMatches, getPotentialMatches }; 
+}; 
