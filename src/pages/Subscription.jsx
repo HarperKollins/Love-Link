@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
@@ -17,9 +17,14 @@ const Subscription = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [plans, setPlans] = useState([]);
   const navigate = useNavigate();
-  
-  const plans = getSubscriptionPlans();
+
+  useEffect(() => {
+    // Load subscription plans
+    const subscriptionPlans = getSubscriptionPlans();
+    setPlans(subscriptionPlans);
+  }, []);
 
   const handleSelectPlan = (planId) => {
     const plan = plans.find(p => p.id === planId);
@@ -43,30 +48,32 @@ const Subscription = () => {
       if (response.success) {
         // Calculate premium end date based on plan duration
         const now = new Date();
-        let premiumEndDate = new Date();
+        let endDate = new Date();
         
         switch (selectedPlan.id) {
           case 'monthly':
-            premiumEndDate.setMonth(now.getMonth() + 1);
+            endDate.setMonth(now.getMonth() + 1);
             break;
           case 'quarterly':
-            premiumEndDate.setMonth(now.getMonth() + 3);
+            endDate.setMonth(now.getMonth() + 3);
             break;
           case 'yearly':
-            premiumEndDate.setFullYear(now.getFullYear() + 1);
+            endDate.setFullYear(now.getFullYear() + 1);
             break;
           default:
-            premiumEndDate.setMonth(now.getMonth() + 1);
+            endDate.setMonth(now.getMonth() + 1);
         }
         
-        // Update subscription in Firestore
-        const subscriptionRef = doc(db, 'subscriptions', currentUser.uid);
-        await updateDoc(subscriptionRef, {
-          isPremium: true,
-          isActive: true,
-          premiumEndDate: premiumEndDate,
-          planId: selectedPlan.id,
-          paymentReference: response.reference,
+        // Update subscription in user document
+        const userRef = doc(db, 'users', currentUser.uid);
+        await updateDoc(userRef, {
+          subscription: {
+            status: 'active',
+            plan: selectedPlan.id,
+            startDate: now,
+            endDate: endDate,
+            paymentReference: response.reference
+          },
           updatedAt: serverTimestamp()
         });
         
@@ -87,6 +94,14 @@ const Subscription = () => {
       setLoading(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-pink-500"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 pb-20">

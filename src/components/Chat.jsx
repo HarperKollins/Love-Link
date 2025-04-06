@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebase';
-import { collection, query, where, getDocs, doc, updateDoc, arrayUnion, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, arrayUnion, onSnapshot, addDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 
 export default function Chat() {
   const { currentUser } = useAuth();
@@ -17,18 +17,25 @@ export default function Chat() {
     const fetchMatches = async () => {
       try {
         setLoading(true);
-        const userDoc = doc(db, 'users', currentUser.uid);
-        const userData = await getDocs(userDoc);
-        const userMatches = userData.data()?.matches || [];
-
-        const matchesRef = collection(db, 'users');
-        const q = query(matchesRef, where('uid', 'in', userMatches));
-        const querySnapshot = await getDocs(q);
-        const matchesList = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setMatches(matchesList);
+        // Get user's matches from userActions collection
+        const userActionsRef = doc(db, 'userActions', currentUser.uid);
+        const userActionsDoc = await getDoc(userActionsRef);
+        
+        if (userActionsDoc.exists()) {
+          const userActionsData = userActionsDoc.data();
+          const matchesList = userActionsData.matches || [];
+          
+          // Fetch profile data for each match
+          const matchesRef = collection(db, 'users');
+          const q = query(matchesRef, where('uid', 'in', matchesList));
+          const querySnapshot = await getDocs(q);
+          const matchesData = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          
+          setMatches(matchesData);
+        }
       } catch (error) {
         setError('Failed to fetch matches');
         console.error('Error fetching matches:', error);

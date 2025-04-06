@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
-import { collection, query, where, getDocs, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, arrayUnion, arrayRemove, getDoc, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Navigation, Pagination } from 'swiper/modules';
@@ -11,6 +12,7 @@ import 'swiper/css/pagination';
 import ProfileCard from '../components/ui/ProfileCard';
 
 const Matches = () => {
+  const navigate = useNavigate();
   const { currentUser } = useAuth();
   const { hasAccess } = useSubscription();
   const [potentialMatches, setPotentialMatches] = useState([]);
@@ -20,47 +22,44 @@ const Matches = () => {
   const [userActions, setUserActions] = useState({ likes: [], dislikes: [] });
   const [matches, setMatches] = useState([]);
   const [currentProfile, setCurrentProfile] = useState(null);
+  const [matchProfiles, setMatchProfiles] = useState([]);
 
   // Fetch potential matches
   useEffect(() => {
     const fetchPotentialMatches = async () => {
+      if (!currentUser) return;
+      
+      setLoading(true);
       try {
-        if (!currentUser) return;
-        
-        // Get current user data to match based on interests
-        const userDoc = await getDocs(query(collection(db, 'users'), where('uid', '==', currentUser.uid)));
-        const userData = userDoc.docs[0]?.data();
-        
-        if (!userData) {
-          setLoading(false);
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (!userDoc.exists()) {
+          setError('User profile not found');
           return;
         }
-        
-        // Get user actions (likes, dislikes)
-        const userActionsDoc = await getDocs(query(collection(db, 'userActions'), where('uid', '==', currentUser.uid)));
-        const userActionsData = userActionsDoc.docs[0]?.data() || { likes: [], dislikes: [], matches: [] };
-        setUserActions(userActionsData);
-        setMatches(userActionsData.matches || []);
-        
-        // Get all users
-        const usersSnapshot = await getDocs(collection(db, 'users'));
-        
-        // Filter out current user, already liked/disliked users, and users with no common interests
-        const filteredUsers = usersSnapshot.docs
+
+        const userData = userDoc.data();
+        const userInterests = userData.interests || [];
+        const userActions = userData.actions || {};
+
+        // Get all users except current user and those already acted upon
+        const usersRef = collection(db, 'users');
+        const q = query(
+          usersRef,
+          where('uid', '!=', currentUser.uid),
+          where('interests', 'array-contains-any', userInterests),
+          limit(10)
+        );
+
+        const querySnapshot = await getDocs(q);
+        const matches = querySnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter(user => 
-            user.id !== currentUser.uid && 
-            !userActionsData.likes.includes(user.id) && 
-            !userActionsData.dislikes.includes(user.id) &&
-            user.interests && userData.interests && 
-            user.interests.some(interest => userData.interests.includes(interest))
-          );
-        
-        setPotentialMatches(filteredUsers);
-        setLoading(false);
+          .filter(user => !userActions[user.uid]);
+
+        setPotentialMatches(matches);
       } catch (error) {
         console.error('Error fetching potential matches:', error);
-        setError('Failed to load potential matches. Please try again later.');
+        setError('Error loading matches. Please try again later.');
+      } finally {
         setLoading(false);
       }
     };

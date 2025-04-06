@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { doc, updateDoc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Navigation, Pagination } from 'swiper/modules';
@@ -16,8 +16,8 @@ const Profile = () => {
   const { currentUser, updateUserProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState({
-    displayName: '',
-    photoURL: '',
+    displayName: currentUser?.displayName || '',
+    photoURL: currentUser?.photoURL || '',
     bio: '',
     interests: [],
     location: '',
@@ -36,7 +36,9 @@ const Profile = () => {
   const [uploading, setUploading] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
+  const defaultAvatar = '/default-avatar.png';
 
   // Available interests
   const availableInterests = [
@@ -50,11 +52,31 @@ const Profile = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       if (currentUser) {
-        const docRef = doc(db, 'users', currentUser.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setProfile(docSnap.data());
+        try {
+          const docRef = doc(db, 'users', currentUser.uid);
+          const docSnap = await getDoc(docRef);
+          
+          if (!docSnap.exists()) {
+            // Create user document if it doesn't exist
+            await setDoc(docRef, {
+              email: currentUser.email,
+              displayName: currentUser.displayName,
+              photoURL: currentUser.photoURL,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            });
+          }
+          
+          setProfile(prev => ({
+            ...prev,
+            ...docSnap.data()
+          }));
+        } catch (error) {
+          console.error('Error fetching profile:', error);
+        } finally {
+          setLoading(false);
         }
+      } else {
         setLoading(false);
       }
     };
@@ -77,51 +99,92 @@ const Profile = () => {
     }));
   };
 
-  const handlePhotoUpload = async (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    setUploading(true);
     try {
-      const storage = getStorage();
-      const storageRef = ref(storage, `users/${currentUser.uid}/profile/${Date.now()}_${file.name}`);
-      const uploadTask = uploadBytesResumable(storageRef, file);
+      setUploading(true);
+      setError('');
+
+      // Check file type
+      if (!file.type.startsWith('image/')) {
+        throw new Error('Please upload an image file');
+      }
+
+      // Check file size (max 2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        throw new Error('Image size should be less than 2MB');
+      }
+
+      // Create a canvas to compress the image
+      const compressImage = (file) => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
+              
+              // Set canvas dimensions (max 500px width/height)
+              const maxSize = 500;
+              let width = img.width;
+              let height = img.height;
+              
+              if (width > height) {
+                if (width > maxSize) {
+                  height *= maxSize / width;
+                  width = maxSize;
+                }
+              } else {
+                if (height > maxSize) {
+                  width *= maxSize / height;
+                  height = maxSize;
+                }
+              }
+              
+              canvas.width = width;
+              canvas.height = height;
+              
+              // Draw and compress image
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+              resolve(compressedDataUrl);
+            };
+            img.src = event.target.result;
+          };
+          reader.readAsDataURL(file);
+        });
+      };
+
+      // Compress and upload the image
+      const compressedImage = await compressImage(file);
       
-      uploadTask.on('state_changed', 
-        (snapshot) => {
-          // Progress tracking if needed
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          console.log('Upload is ' + progress + '% done');
-        },
-        (error) => {
-          console.error('Error uploading photo:', error);
-          setUploading(false);
-        },
-        async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          
-          // Update auth profile
-          await updateProfile(currentUser, {
-            photoURL: downloadURL
-          });
-
-          // Update Firestore
-          const userRef = doc(db, 'users', currentUser.uid);
-          await updateDoc(userRef, {
-            photoURL: downloadURL
-          });
-
-          // Update local state
-          setProfile(prev => ({
-            ...prev,
-            photoURL: downloadURL
-          }));
-          
-          setUploading(false);
-        }
-      );
+      // Create or update user document
+      const userRef = doc(db, 'users', currentUser.uid);
+      await setDoc(userRef, {
+        email: currentUser.email,
+        displayName: currentUser.displayName,
+        photoURL: compressedImage,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      
+      // Update the profile state
+      setProfile(prev => ({
+        ...prev,
+        photoURL: compressedImage
+      }));
+      
+      // Update Firebase Auth profile
+      await updateProfile(currentUser, {
+        photoURL: compressedImage
+      });
+      
+      setUploading(false);
     } catch (error) {
-      console.error('Error uploading photo:', error);
+      console.error('Error uploading image:', error);
+      setError(error.message || 'Failed to upload image. Please try again.');
       setUploading(false);
     }
   };
@@ -129,65 +192,91 @@ const Profile = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Create or update user document
+      const userRef = doc(db, 'users', currentUser.uid);
+      await setDoc(userRef, {
+        ...profile,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      // Update Firebase Auth profile
       await updateProfile(currentUser, {
         displayName: profile.displayName,
         photoURL: profile.photoURL
       });
-
-      const userRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userRef, profile);
       
       setEditMode(false);
     } catch (error) {
       console.error('Error updating profile:', error);
+      setError('Failed to update profile. Please try again.');
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-pink-500"></div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Please log in to view your profile</h2>
+          <button
+            onClick={() => navigate('/login')}
+            className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors"
+          >
+            Go to Login
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
+      <input
+        type="file"
+        id="photo-upload"
+        accept="image/*"
+        onChange={handleImageUpload}
+        className="hidden"
+      />
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
         {/* Profile Header */}
         <div className="relative h-48 bg-gradient-to-r from-pink-500 to-purple-600">
           <div className="absolute -bottom-16 left-8">
-            <div className="relative group">
-              <div className="w-32 h-32 rounded-full border-4 border-white overflow-hidden bg-gray-200">
-                {uploading ? (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-pink-500"></div>
-                  </div>
-                ) : (
+            <div className="relative">
+              <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-200">
+                {profile.photoURL ? (
                   <img
-                    src={profile.photoURL || 'https://via.placeholder.com/150'}
+                    src={profile.photoURL.startsWith('data:image') ? profile.photoURL : defaultAvatar}
                     alt="Profile"
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      e.target.src = 'https://via.placeholder.com/150';
+                      e.target.src = defaultAvatar;
                     }}
+                  />
+                ) : (
+                  <img
+                    src={defaultAvatar}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
                   />
                 )}
               </div>
-              {editMode && (
-                <label className="absolute bottom-0 right-0 bg-white rounded-full p-2 shadow-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoUpload}
-                    className="hidden"
-                  />
-                  <svg className="w-6 h-6 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </label>
-              )}
+              <button
+                onClick={() => document.getElementById('photo-upload').click()}
+                className="absolute bottom-0 right-0 bg-white rounded-full p-1 border-2 border-primary-600"
+              >
+                <svg className="h-5 w-5 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -383,6 +472,18 @@ const Profile = () => {
           )}
         </div>
       </div>
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+          <span className="block sm:inline">{error}</span>
+        </div>
+      )}
+      {uploading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-4 rounded-lg">
+            <p className="text-gray-700">Uploading image...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

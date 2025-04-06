@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { signInWithPopup } from 'firebase/auth';
+import { auth, db } from '../services/firebase';
+import { provider } from '../services/firebase';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -23,18 +27,50 @@ export default function Login() {
     }
   }
 
-  async function handleGoogleSignIn() {
+  const handleGoogleSignIn = async () => {
     try {
       setError('');
       setLoading(true);
-      await signInWithGoogle();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      // Create user document in Firestore
+      const userRef = doc(db, 'users', user.uid);
+      await setDoc(userRef, {
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        visibility: 'public',
+        interests: [],
+        bio: '',
+        location: '',
+        age: null,
+        gender: '',
+        lookingFor: '',
+        isVerified: false
+      }, { merge: true });
+
+      // Create subscription document
+      const subscriptionRef = doc(db, 'subscriptions', user.uid);
+      await setDoc(subscriptionRef, {
+        userId: user.uid,
+        isPremium: false,
+        isActive: false,
+        signupDate: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
       navigate('/profile');
     } catch (error) {
-      setError(error.message);
+      console.error('Error signing in with Google:', error);
+      setError('Failed to sign in with Google. Please try again.');
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">

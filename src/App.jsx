@@ -10,7 +10,7 @@ import Profile from './pages/Profile'
 import Matches from './pages/Matches'
 import Chat from './pages/Chat'
 import Settings from './pages/Settings'
-import Pricing from './components/Pricing'
+import Pricing from './pages/Pricing'
 
 function App() {
   return (
@@ -39,7 +39,7 @@ function App() {
             }
           />
           <Route
-            path="/chat/:chatId"
+            path="/chat"
             element={
               <PrivateRoute>
                 <Chat />

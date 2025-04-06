@@ -22,17 +22,17 @@ export function SubscriptionProvider({ children }) {
       return;
     }
 
-    const subscriptionRef = doc(db, 'subscriptions', currentUser.uid);
+    const userRef = doc(db, 'users', currentUser.uid);
     
-    const unsubscribe = onSnapshot(subscriptionRef, (doc) => {
+    const unsubscribe = onSnapshot(userRef, (doc) => {
       if (doc.exists()) {
+        const userData = doc.data();
         setSubscription({
           id: doc.id,
-          ...doc.data(),
-          signupDate: doc.data().signupDate?.toDate(),
-          trialEndDate: doc.data().signupDate ? 
-            new Date(doc.data().signupDate.toDate().getTime() + (3 * 24 * 60 * 60 * 1000)) : null,
-          premiumEndDate: doc.data().premiumEndDate?.toDate()
+          ...userData.subscription,
+          signupDate: userData.createdAt?.toDate(),
+          trialEndDate: userData.trialEndDate?.toDate(),
+          premiumEndDate: userData.subscription?.endDate?.toDate()
         });
       } else {
         setSubscription(null);
@@ -52,9 +52,9 @@ export function SubscriptionProvider({ children }) {
     if (!currentUser || !subscription) return false;
     
     // If user is premium, they have access
-    if (subscription.isPremium) {
+    if (subscription.status === 'active') {
       const now = new Date();
-      return subscription.premiumEndDate > now;
+      return subscription.endDate > now;
     }
     
     // If user is in trial period, they have access
@@ -71,8 +71,8 @@ export function SubscriptionProvider({ children }) {
     hasAccess: hasAccess(),
     isTrialActive: subscription?.signupDate ? isTrialActive(subscription.signupDate) : false,
     trialDaysLeft: subscription?.signupDate ? getTrialDaysLeft(subscription.signupDate) : 0,
-    isPremium: subscription?.isPremium || false,
-    premiumEndDate: subscription?.premiumEndDate || null
+    isPremium: subscription?.status === 'active' || false,
+    premiumEndDate: subscription?.endDate || null
   };
 
   return (
