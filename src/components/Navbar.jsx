@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
+import SearchIcon from './ui/SearchIcon';
 
 export default function Navbar() {
   const { currentUser, logout } = useAuth();
@@ -51,6 +52,7 @@ export default function Navbar() {
                 >
                   Profile
                 </Link>
+                <SearchIcon />
                 <button
                   onClick={handleLogout}
                   className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
@@ -78,6 +80,11 @@ export default function Navbar() {
 
           {/* Mobile menu button */}
           <div className="sm:hidden flex items-center">
+            {currentUser && (
+              <div className="mr-2">
+                <SearchIcon />
+              </div>
+            )}
             <button
               onClick={() => setIsOpen(!isOpen)}
               className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
